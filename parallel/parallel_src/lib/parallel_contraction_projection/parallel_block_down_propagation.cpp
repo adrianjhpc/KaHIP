@@ -135,7 +135,7 @@ void parallel_block_down_propagation::update_ghost_nodes_blocks( MPI_Comm commun
                 } endfor
         } endfor
 
-	    msize = m_send_buffers.size();
+	msize = m_send_buffers.size();
         request_array = (MPI_Request *)malloc(msize*sizeof(MPI_Request));
         for(int i=0;i<msize;i++){
                 request_array[i] = MPI_REQUEST_NULL;
