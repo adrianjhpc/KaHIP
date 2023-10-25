@@ -972,6 +972,8 @@ inline void ghost_node_communication::update_ghost_node_data_finish() {
 }
 
 inline void ghost_node_communication::update_ghost_node_data_global() {
+        int send_size;
+        MPI_Request *request_array;
         std::vector< std::vector< NodeID > > send_buffers; // buffers to send messages
         send_buffers.resize(m_size);
         forall_local_nodes((*m_G), node) {
@@ -994,6 +996,12 @@ inline void ghost_node_communication::update_ghost_node_data_global() {
                 } endfor
         } endfor
 
+	send_size = send_buffers.size();
+        request_array = (MPI_Request *)malloc(send_size*sizeof(MPI_Request));
+        for(int i=0;i<send_size;i++){
+                request_array[i] = MPI_REQUEST_NULL;
+        } 
+
         //send all neighbors their packages using Isends
         //a neighbor that does not receive something gets a specific token
         for( PEID peID = 0; peID < (PEID)send_buffers.size(); peID++) {
@@ -1004,9 +1012,8 @@ inline void ghost_node_communication::update_ghost_node_data_global() {
                                 send_buffers[peID].push_back(0);
                         }
 
-                        MPI_Request rq; 
                         MPI_Isend( &send_buffers[peID][0], 
-                                    send_buffers[peID].size(), MPI_UNSIGNED_LONG_LONG, peID, peID+3*m_size, m_communicator, &rq);
+                                    send_buffers[peID].size(), MPI_UNSIGNED_LONG_LONG, peID, peID+3*m_size, m_communicator, &request_array[peID]);
                 }
         }
 
@@ -1035,6 +1042,9 @@ inline void ghost_node_communication::update_ghost_node_data_global() {
                         m_G->setNodeLabel( m_G->m_global_to_local_id[global_id], label);
                 }
         }
+
+        MPI_Waitall(send_size, request_array, MPI_STATUSES_IGNORE);
+        free(request_array);
 
         MPI_Barrier(m_communicator);
 }

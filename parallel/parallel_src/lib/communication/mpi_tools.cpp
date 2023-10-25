@@ -25,6 +25,7 @@ mpi_tools::~mpi_tools() {
 // later on this may be a parallel io routine
 void mpi_tools::collect_and_write_labels( MPI_Comm communicator, PPartitionConfig & config, parallel_graph_access & G) {
         int rank, size;
+	MPI_Request request;
         MPI_Comm_rank( communicator, &rank);
         MPI_Comm_size( communicator, &size);
 
@@ -70,8 +71,7 @@ void mpi_tools::collect_and_write_labels( MPI_Comm communicator, PPartitionConfi
                 }
 
         } else {
-                MPI_Request rq;
-                MPI_Isend( &labels[0], labels.size(), MPI_UNSIGNED_LONG_LONG, ROOT, rank+12*size, communicator, &rq);
+                MPI_Isend( &labels[0], labels.size(), MPI_UNSIGNED_LONG_LONG, ROOT, rank+12*size, communicator, &request);
         }
 
         if( rank == ROOT ) {
@@ -79,6 +79,8 @@ void mpi_tools::collect_and_write_labels( MPI_Comm communicator, PPartitionConfi
                 parallel_vector_io pvio;
                 pvio.writeVectorSequentially(labels, clustering_filename);
         }
+
+        MPI_Wait(&request, MPI_STATUS_IGNORE);
         MPI_Barrier(communicator);
 }
 
@@ -88,6 +90,7 @@ void mpi_tools::collect_parallel_graph_to_local_graph( MPI_Comm communicator, PP
                                                        complete_graph_access & Q) {
 
         int rank, size;
+	MPI_Request request;
         MPI_Comm_rank( communicator, &rank);
         MPI_Comm_size( communicator, &size);
         
@@ -153,13 +156,14 @@ void mpi_tools::collect_parallel_graph_to_local_graph( MPI_Comm communicator, PP
 
                 }
         } else {
-                MPI_Request rq; 
-                MPI_Isend( &message[0], message.size(), MPI_UNSIGNED_LONG_LONG, ROOT, 13*size, communicator, &rq);
+                MPI_Isend( &message[0], message.size(), MPI_UNSIGNED_LONG_LONG, ROOT, 13*size, communicator, &request);
         }
 
         if( rank == ROOT ) {
                 Q.finish_construction();
         }
+
+	MPI_Wait(&request, MPI_STATUS_IGNORE);
 
         MPI_Barrier(communicator);
 }

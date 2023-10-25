@@ -122,6 +122,12 @@ void parallel_mh_async::initialize(PartitionConfig & working_config, graph_acces
                 std::cout <<  "created with objective " <<  first_one.objective << std::endl;
         }
 
+	MPI_Request *request_array;
+        request_array = (MPI_Request *)malloc(m_size*sizeof(MPI_Request));
+        for(int i=0;i<m_size;i++){
+                request_array[i] = MPI_REQUEST_NULL;
+        } 
+
         double time_spend = m_t.elapsed();
         m_island->insert(G, first_one);
 
@@ -135,13 +141,15 @@ void parallel_mh_async::initialize(PartitionConfig & working_config, graph_acces
                 population_size                 = ceil(fraction_to_spend_for_IP / time_spend);
 
                 for( int target = 1; target < m_size; target++) {
-                        MPI_Request rq;
-                        MPI_Isend(&population_size, 1, MPI_INT, target, POPSIZE_TAG, m_communicator, &rq); 
+                        MPI_Isend(&population_size, 1, MPI_INT, target, POPSIZE_TAG, m_communicator, &request_array[target]); 
                 }
         } else {
                 MPI_Status rst;
                 MPI_Recv(&population_size, 1, MPI_INT, ROOT, POPSIZE_TAG, m_communicator, &rst); 
         }
+
+        MPI_Waitall(m_size, request_array, MPI_STATUSES_IGNORE);
+        free(request_array);
 
         MPI_Barrier(MPI_COMM_WORLD);
 
