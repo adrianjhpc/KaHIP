@@ -18,9 +18,15 @@ parallel_projection::~parallel_projection() {
 //issue recv before send
 void parallel_projection::parallel_project( MPI_Comm communicator, parallel_graph_access & finer, parallel_graph_access & coarser ) {
         PEID rank, size;
+	MPI_Request *request_array;
         MPI_Comm_rank( communicator, &rank);
         MPI_Comm_size( communicator, &size);
         
+        request_array = (MPI_Request *)malloc(size*2*sizeof(MPI_Request));
+        for(int i=0;i<size*2;i++){
+                request_array[i] = MPI_REQUEST_NULL;
+        } 
+
         NodeID divisor = ceil(coarser.number_of_global_nodes() / (double)size);
 
         m_messages.resize(size);
@@ -50,11 +56,10 @@ void parallel_projection::parallel_project( MPI_Comm communicator, parallel_grap
                                 m_messages[peID].push_back(std::numeric_limits<NodeID>::max());
                         }
 
-                        MPI_Request rq;
                         MPI_Isend( &m_messages[peID][0], 
                                                 m_messages[peID].size(), 
                                                 MPI_UNSIGNED_LONG_LONG, 
-                                                peID, peID+size, communicator, &rq);
+                                                peID, peID+size, communicator, &request_array[peID]);
                 }
         }
 
@@ -79,11 +84,10 @@ void parallel_projection::parallel_project( MPI_Comm communicator, parallel_grap
                 // now integrate the changes
                 if( incmessage[0] == std::numeric_limits< NodeID >::max()) {
                         out_messages[peID].push_back(std::numeric_limits< NodeID >::max());
-                        MPI_Request rq; 
                         MPI_Isend( &out_messages[peID][0], 
                                         out_messages[peID].size(), 
                                         MPI_UNSIGNED_LONG_LONG, 
-                                        peID, peID+2*size, communicator, &rq);
+                                        peID, peID+2*size, communicator, &request_array[size+counter]);
 
                         continue; // nothing to do
                 }
@@ -94,17 +98,16 @@ void parallel_projection::parallel_project( MPI_Comm communicator, parallel_grap
                         out_messages[peID].push_back(coarser.getNodeLabel(cnode));
                 }
 
-                MPI_Request rq;
                 MPI_Isend( &out_messages[peID][0], 
                                 out_messages[peID].size(), 
                                 MPI_UNSIGNED_LONG_LONG, 
-                                peID, peID+2*size, communicator, &rq);
+                                peID, peID+2*size, communicator, &request_array[size+counter]);
 
         }
 
         counter = 0;
         while( counter < size - 1) {
-                // wait for incomming message of an adjacent processor
+                // wait for incoming message of an adjacent processor
                 MPI_Status st; ULONG tag = rank+2*size;
                 MPI_Probe(MPI_ANY_SOURCE, tag, communicator, &st);
 
@@ -133,6 +136,10 @@ void parallel_projection::parallel_project( MPI_Comm communicator, parallel_grap
         }
 
         finer.update_ghost_node_data_global(); // blocking
+
+        MPI_Waitall(2*size, request_array, MPI_STATUSES_IGNORE);
+        free(request_array);
+
 }
 
 //initial assignment after initial partitioning
