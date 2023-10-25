@@ -60,9 +60,16 @@ void parallel_contraction::compute_label_mapping( MPI_Comm communicator, paralle
                                                   NodeID & global_num_distinct_ids,
                                                   std::unordered_map< NodeID, NodeID > & label_mapping ) {
         PEID rank, size;
+        MPI_Request *request_array;
         MPI_Comm_rank( communicator, &rank);
         MPI_Comm_size( communicator, &size);
-        
+          
+
+        request_array = (MPI_Request *)malloc(size*2*sizeof(MPI_Request));
+        for(int i=0;i<size*2;i++){
+                request_array[i] = MPI_REQUEST_NULL;
+        } 
+
         NodeID divisor  = ceil( G.number_of_global_nodes()/ (double)size);
 
         helpers helper;
@@ -89,11 +96,10 @@ void parallel_contraction::compute_label_mapping( MPI_Comm communicator, paralle
                                 m_messages[peID].push_back(std::numeric_limits<NodeID>::max());
                         }
 
-                        MPI_Request rq; 
                         MPI_Isend( &m_messages[peID][0], 
                                     m_messages[peID].size(), 
                                     MPI_UNSIGNED_LONG_LONG, 
-                                    peID, peID+4*size, communicator, &rq);
+                                    peID, peID+4*size, communicator, &request_array[peID]);
                 }
         }
         std::vector< std::vector< NodeID > > local_labels_byPE;
@@ -200,11 +206,10 @@ void parallel_contraction::compute_label_mapping( MPI_Comm communicator, paralle
 
         for( PEID peID = 0; peID < size; peID++) {
                 if( peID != rank ) {
-                        MPI_Request rq;
                         MPI_Isend( &m_out_messages[peID][0], 
                                     m_out_messages[peID].size(), 
                                     MPI_UNSIGNED_LONG_LONG, 
-                                    peID, peID+5*size, communicator, &rq);
+                                    peID, peID+5*size, communicator, &request_array[size+peID]);
                 }
         }
 
@@ -235,14 +240,18 @@ void parallel_contraction::compute_label_mapping( MPI_Comm communicator, paralle
                         label_mapping[ m_messages[peID][i] ] = incmessage[i];
                 }
         }
+
+        MPI_Waitall(2*size, request_array, MPI_STATUSES_IGNORE);
+        free(request_array);
 }
 
 
 void parallel_contraction::get_nodes_to_cnodes_ghost_nodes( MPI_Comm communicator, parallel_graph_access & G ) {
-        PEID rank, size;
+        PEID rank, size, msize;
+        MPI_Request *request_array;
         MPI_Comm_rank( communicator, &rank);
         MPI_Comm_size( communicator, &size);
-        
+ 
         std::vector< bool > PE_packed( size, false );
         m_send_buffers.resize( size );
 
@@ -268,6 +277,12 @@ void parallel_contraction::get_nodes_to_cnodes_ghost_nodes( MPI_Comm communicato
                 }
         } endfor
 
+	msize = m_send_buffers.size();
+	request_array = (MPI_Request *)malloc(msize*sizeof(MPI_Request));
+        for(int i=0;i<m_send_buffers.size();i++){
+                request_array[i] = MPI_REQUEST_NULL;
+        }
+
         //send all neighbors their packages using Isends
         //a neighbor that does not receive something gets a specific token
         for( PEID peID = 0; peID < (PEID)m_send_buffers.size(); peID++) {
@@ -278,9 +293,8 @@ void parallel_contraction::get_nodes_to_cnodes_ghost_nodes( MPI_Comm communicato
                                 m_send_buffers[peID].push_back(0);
                         }
 
-                        MPI_Request rq;
                         MPI_Isend( &m_send_buffers[peID][0], 
-                                    m_send_buffers[peID].size(), MPI_UNSIGNED_LONG_LONG, peID, peID+6*size, communicator, &rq);
+                                    m_send_buffers[peID].size(), MPI_UNSIGNED_LONG_LONG, peID, peID+6*size, communicator, &request_array[peID]);
                 }
         }
 
@@ -310,6 +324,10 @@ void parallel_contraction::get_nodes_to_cnodes_ghost_nodes( MPI_Comm communicato
                         G.setCNode( G.getLocalID(global_id), cnode);
                 }
         }
+
+        MPI_Waitall(msize, request_array, MPI_STATUSES_IGNORE);
+        free(request_array);
+
 }
 
 
@@ -348,8 +366,14 @@ void parallel_contraction::redistribute_hased_graph_and_build_graph_locally( MPI
                                                                              NodeID number_of_cnodes, 
                                                                              parallel_graph_access & Q  ) {
         PEID rank, size;
+        MPI_Request *request_array;
         MPI_Comm_rank( communicator, &rank);
         MPI_Comm_size( communicator, &size);
+
+        request_array = (MPI_Request *)malloc(size*2*sizeof(MPI_Request));
+        for(int i=0;i<size*2;i++){
+                request_array[i] = MPI_REQUEST_NULL;
+        }
         
         NodeID divisor          = ceil( number_of_cnodes/(double)size);
 
@@ -380,11 +404,10 @@ void parallel_contraction::redistribute_hased_graph_and_build_graph_locally( MPI
                                 m_messages[peID].push_back(std::numeric_limits<NodeID>::max());
                         }
 
-                        MPI_Request rq;
                         MPI_Isend( &m_messages[peID][0], 
                                     m_messages[peID].size(), 
                                     MPI_UNSIGNED_LONG_LONG, 
-                                    peID, peID+7*size, communicator, &rq);
+                                    peID, peID+7*size, communicator, &request_array[size+peID]);
                 }
         }
 
@@ -519,11 +542,10 @@ void parallel_contraction::redistribute_hased_graph_and_build_graph_locally( MPI
                                 m_messages[peID].push_back(std::numeric_limits<NodeID>::max());
                         }
 
-                        MPI_Request rq;
                         MPI_Isend( &m_messages[peID][0], 
                                     m_messages[peID].size(), 
                                     MPI_UNSIGNED_LONG_LONG, 
-                                    peID, peID+8*size, communicator, &rq);
+                                    peID, peID+8*size, communicator, &request_array[size+peID]);
                 }
         }
 
@@ -560,15 +582,20 @@ void parallel_contraction::redistribute_hased_graph_and_build_graph_locally( MPI
                         Q.setNodeWeight( node , Q.getNodeWeight(node) + weight);
                 }
         }
+
+
+        MPI_Waitall(2*size, request_array, MPI_STATUSES_IGNORE);
+        free(request_array);
 }
 
 
 void parallel_contraction::update_ghost_nodes_weights( MPI_Comm communicator, parallel_graph_access & G ) {
-        PEID rank, size;
+        PEID rank, size, msize;
+        MPI_Request *request_array;
         MPI_Comm_rank( communicator, &rank);
         MPI_Comm_size( communicator, &size);
         
-               //std::vector< std::vector< NodeID > > send_buffers; // buffers to send messages
+	//std::vector< std::vector< NodeID > > send_buffers; // buffers to send messages
         m_send_buffers.resize(size);
         std::vector< bool > PE_packed(size, false);
         forall_local_nodes(G, node) {
@@ -591,6 +618,12 @@ void parallel_contraction::update_ghost_nodes_weights( MPI_Comm communicator, pa
                 } endfor
         } endfor
 
+	msize = m_send_buffers.size();
+        request_array = (MPI_Request *)malloc(msize*sizeof(MPI_Request));
+        for(int i=0;i<size*2;i++){
+                request_array[i] = MPI_REQUEST_NULL;
+        }
+
         //send all neighbors their packages using Isends
         //a neighbor that does not receive something gets a specific token
         for( PEID peID = 0; peID < (PEID)m_send_buffers.size(); peID++) {
@@ -601,9 +634,8 @@ void parallel_contraction::update_ghost_nodes_weights( MPI_Comm communicator, pa
                                 m_send_buffers[peID].push_back(0);
                         }
 
-                        MPI_Request rq; 
                         MPI_Isend( &m_send_buffers[peID][0], 
-                                    m_send_buffers[peID].size(), MPI_UNSIGNED_LONG_LONG, peID, peID+9*size, communicator, &rq);
+                                    m_send_buffers[peID].size(), MPI_UNSIGNED_LONG_LONG, peID, peID+9*size, communicator, &request_array[peID]);
                 }
         }
 
@@ -632,5 +664,8 @@ void parallel_contraction::update_ghost_nodes_weights( MPI_Comm communicator, pa
                         G.setNodeWeight( G.getLocalID(global_id), weight);
                 }
         }
+
+        MPI_Waitall(msize, request_array, MPI_STATUSES_IGNORE);
+        free(request_array);
 
 }
