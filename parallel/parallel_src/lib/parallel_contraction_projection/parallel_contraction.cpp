@@ -620,7 +620,7 @@ void parallel_contraction::update_ghost_nodes_weights( MPI_Comm communicator, pa
 
 	msize = m_send_buffers.size();
         request_array = (MPI_Request *)malloc(msize*sizeof(MPI_Request));
-        for(int i=0;i<size*2;i++){
+        for(int i=0;i<msize;i++){
                 request_array[i] = MPI_REQUEST_NULL;
         }
 

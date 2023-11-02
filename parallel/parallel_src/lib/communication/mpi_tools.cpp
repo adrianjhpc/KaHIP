@@ -79,8 +79,9 @@ void mpi_tools::collect_and_write_labels( MPI_Comm communicator, PPartitionConfi
                 parallel_vector_io pvio;
                 pvio.writeVectorSequentially(labels, clustering_filename);
         }
-
-        MPI_Wait(&request, MPI_STATUS_IGNORE);
+        if( rank != ROOT) {
+                MPI_Wait(&request, MPI_STATUS_IGNORE);
+        }
         MPI_Barrier(communicator);
 }
 
@@ -163,7 +164,9 @@ void mpi_tools::collect_parallel_graph_to_local_graph( MPI_Comm communicator, PP
                 Q.finish_construction();
         }
 
-	MPI_Wait(&request, MPI_STATUS_IGNORE);
+        if( rank != ROOT ) {
+	        MPI_Wait(&request, MPI_STATUS_IGNORE);
+        }
 
         MPI_Barrier(communicator);
 }
